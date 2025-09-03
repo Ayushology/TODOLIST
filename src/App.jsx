@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import toast, { Toaster } from 'react-hot-toast';
+
+const LS_KEYS = {
+  TODOS: 'todos',
+  SHOW_FINISHED: 'showFinished',
+};
 
 const EditIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-pencil-square" viewBox="0 0 16 16">
@@ -14,7 +20,6 @@ const TrashIcon = () => (
   </svg>
 );
 
-
 const Navbar = () => {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
@@ -22,24 +27,11 @@ const Navbar = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      // Time formatting
-      const timeOptions = {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      };
+      const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
       setCurrentTime(now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', ...timeOptions }));
-
-      // Date formatting
-      const dateOptions = {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      };
+      const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
       setCurrentDate(now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', ...dateOptions }));
     }, 1000);
-
     return () => clearInterval(timer);
   }, []);
 
@@ -56,117 +48,204 @@ const Navbar = () => {
   );
 };
 
-
 function App() {
-  const [todo, setTodo] = useState("");
+  const [todo, setTodo] = useState({ text: "", priority: "medium", dueDate: "" });
   const [todos, setTodos] = useState([]);
   const [showFinished, setShowFinished] = useState(true);
 
-  // Load todos from localStorage on the first load
-  useEffect(() => {
-    const todoString = localStorage.getItem("todos");
-    if (todoString) {
-      let savedTodos = JSON.parse(todoString);
-      setTodos(savedTodos);
-    }
-  }, []);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
 
-  // Saves todos to localStorage whenever the todos state changes.
-  useEffect(() => {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  }, [todos]);
-
-  const toggleFinished = () => {
-    setShowFinished(!showFinished);
+  const priorityClasses = {
+    high: 'border-l-4 border-red-500',
+    medium: 'border-l-4 border-yellow-500',
+    low: 'border-l-4 border-green-500',
   };
 
-  const handleEdit = (e, id) => {
-    let t = todos.find(i => i.id === id);
-    setTodo(t.todo);
-    let newTodos = todos.filter(item => item.id !== id);
-    setTodos(newTodos);
+  useEffect(() => {
+  const savedTodos = localStorage.getItem(LS_KEYS.TODOS);
+  if (savedTodos) {
+    try {
+      const parsed = JSON.parse(savedTodos);
+      if (Array.isArray(parsed)) {
+        setTodos(parsed);
+      }
+    } catch {
+      setTodos([]);
+    }
+  }
+  const savedShow = localStorage.getItem(LS_KEYS.SHOW_FINISHED);
+  if (savedShow !== null) {
+    setShowFinished(savedShow === "true");
+  }
+}, []);
+
+useEffect(() => {
+  if (todos.length > 0) {
+    localStorage.setItem(LS_KEYS.TODOS, JSON.stringify(todos));
+  } else {
+    localStorage.removeItem(LS_KEYS.TODOS); // avoid storing empty []
+  }
+}, [todos]);
+
+useEffect(() => {
+  localStorage.setItem(LS_KEYS.SHOW_FINISHED, String(showFinished));
+}, [showFinished]);
+
+  // Sync across tabs
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === LS_KEYS.TODOS && e.newValue) {
+        try {
+          const next = JSON.parse(e.newValue);
+          if (Array.isArray(next)) setTodos(next);
+        } catch {}
+      }
+      if (e.key === LS_KEYS.SHOW_FINISHED && e.newValue !== null) {
+        setShowFinished(e.newValue === 'true');
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const toggleFinished = () => setShowFinished(!showFinished);
+
+  const handleEdit = (item) => {
+    setEditingId(item.id);
+    setEditText(item.todo);
+  };
+
+  const handleSaveEdit = (id) => {
+    if (editText.trim().length < 2) {
+      toast.error("Todo must be at least 2 characters.");
+      return;
+    }
+    setTodos(todos.map(t => (t.id === id ? { ...t, todo: editText.trim() } : t)));
+    setEditingId(null);
+    setEditText('');
+    toast.success('Task updated!');
   };
 
   const handleDelete = (e, id) => {
-    let newTodos = todos.filter(item => item.id !== id);
-    setTodos(newTodos);
+    if (window.confirm("Are you sure you want to delete this task?")) {
+      setTodos(todos.filter(item => item.id !== id));
+      toast('Task deleted!', { icon: '🗑️' });
+    }
   };
 
-  const handleAdd = () => {
-    if (todo.trim().length <= 3) {
-      console.error("Todo must be more than 3 characters long.");
+  const handleAdd = (e) => {
+    if (e) e.preventDefault();
+
+    if (todo.text.trim().length < 2) {
+      toast.error("Todo must be at least 2 characters long.");
       return;
     }
-    setTodos([...todos, { id: uuidv4(), todo: todo.trim(), isCompleted: false }]);
-    setTodo("");
+
+    const newTask = {
+      id: uuidv4(),
+      todo: todo.text.trim(),
+      priority: todo.priority,
+      dueDate: todo.dueDate,
+      isCompleted: false
+    };
+
+    setTodos([newTask, ...todos]);
+    setTodo({ text: "", priority: "medium", dueDate: "" });
+    toast.success('Task added successfully!');
   };
 
   const handleChange = (e) => {
-    setTodo(e.target.value);
+    setTodo({ ...todo, [e.target.name]: e.target.value });
   };
 
   const handleCheckbox = (e) => {
-    let id = e.target.name;
-    let newTodos = todos.map(item => {
-      if (item.id === id) {
-        return { ...item, isCompleted: !item.isCompleted };
-      }
-      return item;
-    });
-    setTodos(newTodos);
+    const id = e.target.name;
+    setTodos(todos.map(item => item.id === id ? { ...item, isCompleted: !item.isCompleted } : item));
   };
 
   return (
     <>
+      <Toaster position="top-center" />
       <Navbar />
       <div className="min-h-screen bg-gray-100 font-sans p-2 sm:p-4">
         <div className="container mx-auto max-w-2xl my-4 sm:my-8 rounded-2xl p-4 sm:p-6 bg-white shadow-2xl transition-all duration-300">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-center text-gray-800 mb-2">Taskify</h1>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-center text-gray-800 mb-2 py-3">Taskify</h1>
           <p className="text-center text-gray-500 mb-6 sm:mb-8">Your Ultimate Task Management Solution</p>
 
+          {/* Add Todo */}
           <div className="add-todo my-6">
             <h2 className="text-xl sm:text-2xl font-bold text-gray-700 mb-3">Add a New Todo</h2>
-            <div className="flex flex-col sm:flex-row gap-3 items-center">
+            <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
               <input
+                name="text"
                 onChange={handleChange}
-                value={todo}
+                value={todo.text}
                 type="text"
                 placeholder="What needs to be done?"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAdd();
-                }}
-                className="w-full flex-1 px-5 py-3 rounded-lg border-2 border-gray-300 bg-white text-gray-800 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300"
+                className="w-full px-5 py-3 rounded-lg border-2 border-gray-300 bg-white text-gray-800 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 md:col-span-2"
               />
-              <button
-                onClick={handleAdd}
-                className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-xl transform hover:scale-105 disabled:bg-blue-300 disabled:cursor-not-allowed"
-                disabled={todo.length <= 3}
+              <input
+                name="dueDate"
+                onChange={handleChange}
+                value={todo.dueDate}
+                type="date"
+                className="w-full px-5 py-3 rounded-lg border-2 border-gray-300 bg-white text-gray-500 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300"
+              />
+              <select
+                name="priority"
+                onChange={handleChange}
+                value={todo.priority}
+                className="w-full px-5 py-3 rounded-lg border-2 border-gray-300 bg-white text-gray-500 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300"
               >
-                Save
+                <option value="low">Low Priority</option>
+                <option value="medium">Medium Priority</option>
+                <option value="high">High Priority</option>
+              </select>
+              <button
+                type="submit"
+                className="w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-xl transform hover:scale-105 disabled:bg-blue-300 disabled:cursor-not-allowed md:col-span-2"
+                disabled={todo.text.trim().length < 2}
+              >
+                Save Task
               </button>
-            </div>
+            </form>
           </div>
 
+          {/* Show Finished Toggle */}
           <div className='flex items-center gap-3 my-6 bg-gray-50 p-3 rounded-lg'>
             <input onChange={toggleFinished} type="checkbox" checked={showFinished} id="show" className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500" />
             <label className='font-semibold text-gray-700' htmlFor="show">Show Finished Tasks</label>
           </div>
 
           <div className='h-[2px] bg-gray-200 w-full mx-auto my-6 rounded-full'></div>
-
           <h2 className="text-xl sm:text-2xl font-bold text-gray-700 text-left mb-4">Your Todos</h2>
           <div className="todos mt-4 space-y-3">
             {todos.length === 0 && <div className='my-5 font-bold text-center text-gray-500'>Your todo list is empty. Add a task to get started!</div>}
-
-            {todos.map(item => {
-              return (showFinished || !item.isCompleted) && (
-                <div key={item.id} className={`todo flex justify-between items-center p-3 sm:p-4 rounded-lg shadow-md transition-all duration-300 ${item.isCompleted ? 'bg-green-50' : 'bg-white'}`}>
+            {todos.map(item => (
+              (showFinished || !item.isCompleted) && (
+                <div key={item.id} className={`todo flex justify-between items-center p-3 sm:p-4 rounded-lg shadow-md transition-all duration-300 ${item.isCompleted ? 'bg-green-50' : 'bg-white'} ${priorityClasses[item.priority]}`}>
                   <div className='flex gap-4 items-center w-full min-w-0'>
                     <input onChange={handleCheckbox} name={item.id} type="checkbox" checked={item.isCompleted} className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 flex-shrink-0"/>
-                    <div className={`w-full text-gray-800 truncate ${item.isCompleted ? "line-through text-gray-400" : ""}`}>{item.todo}</div>
+                    {editingId === item.id ? (
+                      <input
+                        type="text"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEdit(item.id) }}
+                        onBlur={() => handleSaveEdit(item.id)}
+                        autoFocus
+                        className="w-full text-gray-800 bg-transparent border-b-2 border-blue-500 outline-none"
+                      />
+                    ) : (
+                      <div className="w-full flex flex-col">
+                        <span className={`w-full text-gray-800 truncate ${item.isCompleted ? "line-through text-gray-400" : ""}`}>{item.todo}</span>
+                        {item.dueDate && <span className={`text-xs text-gray-500 ${item.isCompleted ? "line-through" : ""}`}>{new Date(item.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric'})}</span>}
+                      </div>
+                    )}
                   </div>
                   <div className="btn flex gap-2 sm:gap-3 ml-2 sm:ml-4">
-                    <button onClick={(e) => handleEdit(e, item.id)} className="p-2 bg-yellow-400 text-white rounded-full transition transform hover:scale-110 hover:bg-yellow-500 shadow-md">
+                    <button onClick={() => handleEdit(item)} className="p-2 bg-yellow-400 text-white rounded-full transition transform hover:scale-110 hover:bg-yellow-500 shadow-md">
                       <EditIcon />
                     </button>
                     <button onClick={(e) => handleDelete(e, item.id)} className="p-2 bg-red-500 text-white rounded-full transition transform hover:scale-110 hover:bg-red-600 shadow-md">
@@ -174,8 +253,8 @@ function App() {
                     </button>
                   </div>
                 </div>
-              );
-            })}
+              )
+            ))}
           </div>
         </div>
       </div>
@@ -184,4 +263,3 @@ function App() {
 }
 
 export default App;
-
