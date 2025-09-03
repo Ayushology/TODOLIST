@@ -63,34 +63,34 @@ function App() {
   };
 
   useEffect(() => {
-  const savedTodos = localStorage.getItem(LS_KEYS.TODOS);
-  if (savedTodos) {
-    try {
-      const parsed = JSON.parse(savedTodos);
-      if (Array.isArray(parsed)) {
-        setTodos(parsed);
+    const savedTodos = localStorage.getItem(LS_KEYS.TODOS);
+    if (savedTodos) {
+      try {
+        const parsed = JSON.parse(savedTodos);
+        if (Array.isArray(parsed)) {
+          setTodos(parsed);
+        }
+      } catch {
+        setTodos([]);
       }
-    } catch {
-      setTodos([]);
     }
-  }
-  const savedShow = localStorage.getItem(LS_KEYS.SHOW_FINISHED);
-  if (savedShow !== null) {
-    setShowFinished(savedShow === "true");
-  }
-}, []);
+    const savedShow = localStorage.getItem(LS_KEYS.SHOW_FINISHED);
+    if (savedShow !== null) {
+      setShowFinished(savedShow === "true");
+    }
+  }, []);
 
-useEffect(() => {
-  if (todos.length > 0) {
-    localStorage.setItem(LS_KEYS.TODOS, JSON.stringify(todos));
-  } else {
-    localStorage.removeItem(LS_KEYS.TODOS); // avoid storing empty []
-  }
-}, [todos]);
+  useEffect(() => {
+    if (todos.length > 0) {
+      localStorage.setItem(LS_KEYS.TODOS, JSON.stringify(todos));
+    } else {
+      localStorage.removeItem(LS_KEYS.TODOS); // avoid storing empty []
+    }
+  }, [todos]);
 
-useEffect(() => {
-  localStorage.setItem(LS_KEYS.SHOW_FINISHED, String(showFinished));
-}, [showFinished]);
+  useEffect(() => {
+    localStorage.setItem(LS_KEYS.SHOW_FINISHED, String(showFinished));
+  }, [showFinished]);
 
   // Sync across tabs
   useEffect(() => {
@@ -189,7 +189,7 @@ useEffect(() => {
                 name="dueDate"
                 onChange={handleChange}
                 value={todo.dueDate}
-                type="date"
+                type="time"
                 className="w-full px-5 py-3 rounded-lg border-2 border-gray-300 bg-white text-gray-500 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300"
               />
               <select
@@ -240,7 +240,11 @@ useEffect(() => {
                     ) : (
                       <div className="w-full flex flex-col">
                         <span className={`w-full text-gray-800 truncate ${item.isCompleted ? "line-through text-gray-400" : ""}`}>{item.todo}</span>
-                        {item.dueDate && <span className={`text-xs text-gray-500 ${item.isCompleted ? "line-through" : ""}`}>{new Date(item.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric'})}</span>}
+                        {item.dueDate && (
+                          <span className={`text-xs text-gray-500 ${item.isCompleted ? "line-through" : ""}`}>
+                            ⏰ {item.dueDate}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
